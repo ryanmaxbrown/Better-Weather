@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NWS Weather">
+<meta name="theme-color" content="#0c1117">
+<meta name="mobile-web-app-capable" content="yes">
+<title>NWS Weather</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c1117;
+  --card: #151d28;
+  --border: rgba(255,255,255,0.06);
+  --subtle: rgba(255,255,255,0.45);
+  --text: #e2e8f0;
+  --accent: #60a5fa;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { 
+  background: var(--bg); color: var(--text); font-family: 'DM Sans', -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden; min-height: 100dvh;
+}
+body { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+
+/* Pull to refresh hint */
+body { overscroll-behavior-y: contain; }
+
+.mono { font-family: 'DM Mono', 'SF Mono', monospace; }
+.label { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--subtle); font-family: 'DM Mono', monospace; }
+
+/* Loading */
+#loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80dvh; gap: 16px; }
+#loading .spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Error */
+.error-box { margin: 16px; padding: 14px 16px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 12px; font-size: 13px; color: #f87171; }
+
+/* Header */
+.header { padding: 12px 16px 10px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, rgba(96,165,250,0.05) 0%, transparent 100%); }
+.header-top { display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; margin-top: 2px; }
+.header h1 .coords { font-size: 10px; font-weight: 400; color: var(--subtle); font-family: 'DM Mono', monospace; display: block; margin-top: 2px; }
+.refresh-btn { background: none; border: 1px solid var(--border); color: var(--accent); width: 36px; height: 36px; border-radius: 10px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.refresh-btn:active { background: rgba(96,165,250,0.1); transform: scale(0.92); }
+.refresh-btn.spinning { animation: spin 0.8s linear infinite; }
+
+/* Location bar */
+.location-bar { padding: 8px 16px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
+.location-bar button { flex: 1; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.location-bar button:active { background: rgba(96,165,250,0.1); transform: scale(0.97); }
+.location-bar button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+/* Alerts */
+.alert { margin: 10px 16px 0; padding: 10px 14px; border-radius: 10px; background: rgba(251,146,60,0.08); border: 1px solid rgba(251,146,60,0.25); font-size: 12px; font-weight: 600; color: #fb923c; }
+
+/* Current hero */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; }
+.hero-main { grid-column: 1 / -1; padding: 18px 20px; background: var(--card); border-radius: 14px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+.hero-main .bg-icon { position: absolute; top: -16px; right: -8px; font-size: 88px; opacity: 0.07; line-height: 1; pointer-events: none; }
+.hero-main .now-label { margin-bottom: 8px; }
+.hero-main .temp-row { display: flex; align-items: baseline; gap: 8px; }
+.hero-main .temp { font-size: 52px; font-weight: 300; line-height: 1; }
+.hero-main .icon { font-size: 26px; }
+.hero-main .condition { font-size: 14px; font-weight: 500; margin-top: 6px; }
+.hero-main .detail { font-size: 11px; color: var(--subtle); font-family: 'DM Mono', monospace; margin-top: 4px; }
+
+.hero-stat { padding: 14px 16px; background: var(--card); border-radius: 14px; border: 1px solid var(--border); }
+.hero-stat .value { font-size: 22px; font-weight: 300; line-height: 1; margin-top: 6px; }
+.hero-stat .sub { font-size: 10px; color: var(--subtle); font-family: 'DM Mono', monospace; margin-top: 6px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; padding: 0 16px 10px; }
+.tabs button { padding: 7px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; font-family: 'DM Sans', sans-serif; transition: all 0.15s; background: transparent; color: var(--subtle); }
+.tabs button.active { background: var(--accent); color: var(--bg); }
+.tabs button:active { transform: scale(0.95); }
+
+/* Sparklines */
+.sparks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 16px 12px; }
+.spark-card { padding: 12px 14px; background: var(--card); border-radius: 12px; border: 1px solid var(--border); }
+.spark-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.spark-head .range { font-size: 11px; color: var(--subtle); font-family: 'DM Mono', monospace; }
+
+/* Hourly scroll */
+.hourly-scroll-wrap { padding: 0 0 12px; }
+.hourly-scroll { display: flex; gap: 2px; overflow-x: auto; padding: 0 16px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.hourly-scroll::-webkit-scrollbar { display: none; }
+.hour-card { flex: 0 0 62px; scroll-snap-align: start; padding: 10px 6px; text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: 10px; transition: background 0.15s; }
+.hour-card .time { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--subtle); font-weight: 500; }
+.hour-card .icon { font-size: 18px; margin: 6px 0 4px; }
+.hour-card .temp { font-size: 15px; font-weight: 600; }
+.hour-card .precip { font-size: 9px; font-family: 'DM Mono', monospace; color: var(--accent); margin-top: 3px; }
+.hour-card .wind { font-size: 9px; color: var(--subtle); margin-top: 2px; }
+
+/* Hourly table */
+.hourly-table-wrap { margin: 0 16px 16px; background: var(--card); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; }
+.hourly-table-wrap .table-header { padding: 10px 14px 8px; border-bottom: 1px solid var(--border); }
+.hourly-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.hourly-table table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: 'DM Mono', monospace; min-width: 520px; }
+.hourly-table th { padding: 7px 8px; text-align: left; font-size: 9px; color: var(--subtle); letter-spacing: 1px; text-transform: uppercase; font-weight: 500; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); }
+.hourly-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.02); }
+.hourly-table tr:active { background: rgba(96,165,250,0.06); }
+.hourly-table .day-sep td { padding: 7px 8px 4px; font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 1px; background: rgba(96,165,250,0.03); border-top: 1px solid var(--border); }
+.precip-badge { display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 10px; }
+
+/* Daily */
+.daily-list { padding: 0 16px 20px; display: grid; gap: 8px; }
+.daily-card { border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+.daily-card-inner { display: grid; grid-template-columns: 1fr 1fr; }
+.daily-half { padding: 14px 16px; }
+.daily-half.day { background: var(--card); }
+.daily-half.night { background: #111820; }
+.daily-half .top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.daily-half .name { font-size: 12px; font-weight: 600; }
+.daily-half .icon { font-size: 20px; }
+.daily-half .temp { font-size: 28px; font-weight: 300; line-height: 1; }
+.daily-half .temp .suffix { font-size: 11px; color: var(--subtle); font-weight: 400; }
+.daily-half .short { font-size: 11px; color: #94a3b8; margin-top: 5px; }
+.daily-half .meta { font-size: 10px; color: var(--subtle); font-family: 'DM Mono', monospace; margin-top: 4px; }
+.daily-half .detail { font-size: 10px; color: rgba(255,255,255,0.28); margin-top: 6px; line-height: 1.45; }
+
+/* Footer */
+.footer { padding: 14px 16px 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.footer span { font-size: 9px; font-family: 'DM Mono', monospace; color: rgba(255,255,255,0.22); letter-spacing: 0.8px; }
+
+/* Settings modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(4px); }
+.modal { width: 100%; max-width: 500px; background: var(--card); border-radius: 20px 20px 0 0; padding: 20px 20px calc(20px + var(--safe-bottom)); }
+.modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.modal label { display: block; font-size: 12px; color: var(--subtle); margin-bottom: 4px; }
+.modal input { width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 14px; margin-bottom: 12px; outline: none; }
+.modal input:focus { border-color: var(--accent); }
+.modal .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.modal button { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
+.modal button:active { transform: scale(0.97); }
+.modal .btn-primary { background: var(--accent); color: var(--bg); }
+.modal .btn-secondary { background: rgba(255,255,255,0.06); color: var(--text); }
+.modal .btn-geo { width: 100%; padding: 12px; border-radius: 12px; border: 1px dashed rgba(96,165,250,0.3); background: rgba(96,165,250,0.05); color: var(--accent); font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-bottom: 16px; transition: all 0.15s; }
+.modal .btn-geo:active { background: rgba(96,165,250,0.12); transform: scale(0.97); }
+
+/* Animations */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fadeUp 0.35s ease-out both; }
+.fade-up-1 { animation-delay: 0.05s; }
+.fade-up-2 { animation-delay: 0.1s; }
+.fade-up-3 { animation-delay: 0.15s; }
+.fade-up-4 { animation-delay: 0.2s; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+// ============ STATE ============
+const NWS = "https://api.weather.gov";
+const STORAGE_KEY = "nws_weather_prefs";
+
+let state = {
+  lat: 44.7422, lon: -93.8265,
+  loading: true, error: null,
+  hourly: null, daily: null, alerts: [],
+  meta: null,
+  tab: "hourly", // hourly | daily
+  showSettings: false,
+  lastUpdate: null,
+};
+
+function loadPrefs() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) { const p = JSON.parse(s); state.lat = p.lat; state.lon = p.lon; }
+  } catch(e) {}
+}
+function savePrefs() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ lat: state.lat, lon: state.lon })); } catch(e) {}
+}
+
+// ============ NWS API ============
+async function fetchNWS(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`NWS error ${res.status}`);
+  return res.json();
+}
+
+async function loadWeather() {
+  state.loading = true; state.error = null; render();
+  try {
+    const pt = await fetchNWS(`${NWS}/points/${state.lat},${state.lon}`);
+    const p = pt.properties;
+    state.meta = {
+      city: p.relativeLocation?.properties?.city,
+      state: p.relativeLocation?.properties?.state,
+      office: p.gridId,
+    };
+
+    const results = await Promise.allSettled([
+      fetchNWS(p.forecastHourly),
+      fetchNWS(p.forecast),
+      fetchNWS(`${NWS}/alerts/active?point=${state.lat},${state.lon}`),
+    ]);
+
+    if (results[0].status === "fulfilled") state.hourly = results[0].value.properties.periods;
+    if (results[1].status === "fulfilled") state.daily = results[1].value.properties.periods;
+    if (results[2].status === "fulfilled") state.alerts = results[2].value.features || [];
+
+    if (results[0].status === "rejected" && results[1].status === "rejected") {
+      throw new Error("Could not load forecast. NWS may be temporarily unavailable — try again shortly.");
+    }
+    state.lastUpdate = new Date();
+    savePrefs();
+  } catch(e) {
+    state.error = e.message;
+  }
+  state.loading = false; render();
+}
+
+// ============ HELPERS ============
+function cToF(c) { return Math.round((c * 9) / 5 + 32); }
+function formatHour(iso) {
+  const h = new Date(iso).getHours();
+  if (h === 0) return "12a";
+  if (h === 12) return "12p";
+  return h > 12 ? `${h-12}p` : `${h}a`;
+}
+function formatDay(iso) { return new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
+function icon(short, isDay) {
+  const s = (short||"").toLowerCase();
+  if (s.includes("thunder") || s.includes("tstorm")) return "⛈️";
+  if (s.includes("snow") || s.includes("blizzard")) return "🌨️";
+  if (s.includes("freezing") || s.includes("sleet") || s.includes("ice")) return "🧊";
+  if (s.includes("rain") || s.includes("shower") || s.includes("drizzle")) return "🌧️";
+  if (s.includes("fog") || s.includes("haze") || s.includes("mist")) return "🌫️";
+  if (s.includes("cloudy") && (s.includes("partly") || s.includes("mostly"))) return isDay ? "⛅" : "☁️";
+  if (s.includes("cloud") || s.includes("overcast")) return "☁️";
+  if (s.includes("wind")) return "💨";
+  if (s.includes("sunny") || s.includes("clear")) return isDay ? "☀️" : "🌙";
+  return isDay ? "🌤️" : "🌙";
+}
+function tempColor(f) {
+  if (f <= 0) return "#a5b4fc"; if (f <= 10) return "#93c5fd"; if (f <= 20) return "#7dd3fc";
+  if (f <= 32) return "#67e8f9"; if (f <= 45) return "#5eead4"; if (f <= 55) return "#6ee7b7";
+  if (f <= 65) return "#86efac"; if (f <= 75) return "#fde047"; if (f <= 85) return "#fdba74";
+  if (f <= 95) return "#fb923c"; if (f <= 105) return "#f87171"; return "#ef4444";
+}
+function precipBg(pct) {
+  if (pct < 20) return "rgba(96,165,250,0.12)"; if (pct < 40) return "rgba(96,165,250,0.25)";
+  if (pct < 60) return "rgba(59,130,246,0.4)"; if (pct < 80) return "rgba(37,99,235,0.55)";
+  return "rgba(29,78,216,0.7)";
+}
+
+function sparkSVG(data, color, h = 48) {
+  if (!data || data.length < 2) return "";
+  const min = Math.min(...data), max = Math.max(...data), range = max - min || 1;
+  const pad = 2, ih = h - pad * 2;
+  const pts = data.map((v, i) => `${(i/(data.length-1))*100},${pad + ih - ((v-min)/range)*ih}`).join(" ");
+  const area = `0,${h} ${pts} 100,${h}`;
+  return `<svg viewBox="0 0 100 ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block;">
+    <polygon points="${area}" fill="${color}22"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
+
+// ============ RENDER ============
+function render() {
+  const app = document.getElementById("app");
+
+  if (state.loading) {
+    app.innerHTML = `<div id="loading"><div class="spinner"></div><span class="mono label">Loading forecast...</span></div>`;
+    return;
+  }
+
+  const h = state.hourly || [];
+  const next48 = h.slice(0, 48);
+  const cur = next48[0];
+  const temps = next48.map(p => p.temperature);
+  const precips = next48.map(p => p.probabilityOfPrecipitation?.value ?? 0);
+  const winds = next48.map(p => { const m = (p.windSpeed||"").match(/([\d.]+)/); return m ? parseFloat(m[1]) : 0; });
+  const humids = next48.map(p => p.relativeHumidity?.value ?? 0);
+  const dewpoints = next48.map(p => p.dewpoint?.value != null ? cToF(p.dewpoint.value) : null);
+
+  // Daily pairs
+  const dailyPairs = [];
+  if (state.daily) {
+    for (let i = 0; i < state.daily.length; i++) {
+      const p = state.daily[i];
+      if (p.isDaytime) dailyPairs.push({ day: p, night: state.daily[i+1] });
+    }
+  }
+
+  let html = "";
+
+  // Header
+  html += `<div class="header">
+    <div class="header-top">
+      <div>
+        <span class="label" style="color:var(--accent)">NWS FORECAST</span>
+        ${state.meta ? `<h1>${state.meta.city}, ${state.meta.state}<span class="coords">${state.lat}°N ${Math.abs(state.lon)}°W · WFO: ${state.meta.office}</span></h1>` : ""}
+      </div>
+      <button class="refresh-btn" onclick="doRefresh(this)" title="Refresh">↻</button>
+    </div>
+  </div>`;
+
+  // Location bar
+  html += `<div class="location-bar">
+    <button onclick="openSettings()">📍 Change Location</button>
+  </div>`;
+
+  // Error
+  if (state.error) {
+    html += `<div class="error-box">⚠ ${state.error}</div>`;
+  }
+
+  // Alerts
+  (state.alerts || []).forEach(a => {
+    html += `<div class="alert">⚠ ${a.properties?.headline || a.properties?.event || "Weather Alert"}</div>`;
+  });
+
+  if (cur) {
+    const precip0 = precips[0] || 0;
+    const maxPrecip6 = Math.max(...precips.slice(0, 6));
+    const dp = dewpoints[0];
+
+    // Hero
+    html += `<div class="hero">
+      <div class="hero-main fade-up">
+        <div class="bg-icon">${icon(cur.shortForecast, cur.isDaytime)}</div>
+        <div class="label now-label">Now</div>
+        <div class="temp-row">
+          <span class="temp" style="color:${tempColor(cur.temperature)}">${cur.temperature}°</span>
+          <span class="icon">${icon(cur.shortForecast, cur.isDaytime)}</span>
+        </div>
+        <div class="condition">${cur.shortForecast}</div>
+        <div class="detail">${dp != null ? `Dewpoint ${dp}° · ` : ""}Humidity ${humids[0]}%</div>
+      </div>
+      <div class="hero-stat fade-up fade-up-1">
+        <div class="label">Wind</div>
+        <div class="value">${cur.windSpeed}</div>
+        <div class="sub">${cur.windDirection}</div>
+      </div>
+      <div class="hero-stat fade-up fade-up-2">
+        <div class="label">Precip</div>
+        <div class="value" style="color:var(--accent)">${precip0}%</div>
+        <div class="sub">6h max: ${maxPrecip6}%</div>
+      </div>
+    </div>`;
+
+    // Tabs
+    html += `<div class="tabs">
+      <button class="${state.tab === "hourly" ? "active" : ""}" onclick="setTab('hourly')">Hourly</button>
+      <button class="${state.tab === "daily" ? "active" : ""}" onclick="setTab('daily')">7-Day</button>
+    </div>`;
+
+    if (state.tab === "hourly") {
+      // Sparklines
+      html += `<div class="sparks fade-up fade-up-2">
+        <div class="spark-card">
+          <div class="spark-head"><span class="label">Temp 48h</span><span class="range mono">${Math.min(...temps)}°–${Math.max(...temps)}°</span></div>
+          ${sparkSVG(temps, "#fbbf24")}
+        </div>
+        <div class="spark-card">
+          <div class="spark-head"><span class="label">Precip 48h</span><span class="range mono">max ${Math.max(...precips)}%</span></div>
+          ${sparkSVG(precips, "#60a5fa")}
+        </div>
+        <div class="spark-card">
+          <div class="spark-head"><span class="label">Wind 48h</span><span class="range mono">max ${Math.round(Math.max(...winds))} mph</span></div>
+          ${sparkSVG(winds, "#a78bfa")}
+        </div>
+        <div class="spark-card">
+          <div class="spark-head"><span class="label">Humidity 48h</span><span class="range mono">${Math.min(...humids)}%–${Math.max(...humids)}%</span></div>
+          ${sparkSVG(humids, "#34d399")}
+        </div>
+      </div>`;
+
+      // Horizontal hourly scroll (next 24h)
+      html += `<div class="hourly-scroll-wrap fade-up fade-up-3"><div class="hourly-scroll">`;
+      next48.slice(0, 24).forEach((p, i) => {
+        const pr = p.probabilityOfPrecipitation?.value ?? 0;
+        html += `<div class="hour-card">
+          <div class="time">${formatHour(p.startTime)}</div>
+          <div class="icon">${icon(p.shortForecast, p.isDaytime)}</div>
+          <div class="temp" style="color:${tempColor(p.temperature)}">${p.temperature}°</div>
+          ${pr > 0 ? `<div class="precip">💧${pr}%</div>` : ""}
+          <div class="wind">${p.windSpeed}</div>
+        </div>`;
+      });
+      html += `</div></div>`;
+
+      // Full hourly table
+      html += `<div class="hourly-table-wrap fade-up fade-up-4">
+        <div class="table-header"><span class="label">48-Hour Detail</span></div>
+        <div class="hourly-table" style="max-height:420px;overflow:auto;"><table><thead><tr>
+          <th>Time</th><th></th><th>Temp</th><th>Dewpt</th><th>Precip</th><th>Humid</th><th>Wind</th><th>Conditions</th>
+        </tr></thead><tbody>`;
+      
+      next48.forEach((p, i) => {
+        const isNewDay = i === 0 || new Date(p.startTime).getDate() !== new Date(next48[i-1].startTime).getDate();
+        const pr = precips[i];
+        const dp = dewpoints[i];
+        if (isNewDay) {
+          html += `<tr class="day-sep"><td colspan="8">${formatDay(p.startTime)}</td></tr>`;
+        }
+        html += `<tr>
+          <td style="font-weight:500">${formatHour(p.startTime)}</td>
+          <td style="font-size:15px">${icon(p.shortForecast, p.isDaytime)}</td>
+          <td style="font-weight:600;color:${tempColor(p.temperature)}">${p.temperature}°</td>
+          <td style="color:var(--subtle)">${dp != null ? dp + "°" : "—"}</td>
+          <td><span class="precip-badge" style="background:${precipBg(pr)};${pr > 40 ? "color:#e2e8f0;font-weight:600;" : "color:var(--subtle);"}">${pr}%</span></td>
+          <td style="color:var(--subtle)">${humids[i]}%</td>
+          <td>${p.windSpeed} ${p.windDirection}</td>
+          <td style="color:#94a3b8;font-family:'DM Sans',sans-serif;font-size:10px">${p.shortForecast}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+
+    } else {
+      // Daily view
+      html += `<div class="daily-list">`;
+      dailyPairs.forEach((pair, i) => {
+        const dPr = pair.day.probabilityOfPrecipitation?.value ?? 0;
+        html += `<div class="daily-card fade-up" style="animation-delay:${i*0.05}s"><div class="daily-card-inner">
+          <div class="daily-half day">
+            <div class="top-row"><span class="name">${pair.day.name}</span><span class="icon">${icon(pair.day.shortForecast, true)}</span></div>
+            <div class="temp" style="color:${tempColor(pair.day.temperature)}">${pair.day.temperature}°<span class="suffix"> hi</span></div>
+            <div class="short">${pair.day.shortForecast}</div>
+            <div class="meta">Wind ${pair.day.windSpeed} ${pair.day.windDirection} · Precip ${dPr}%</div>
+            <div class="detail">${pair.day.detailedForecast}</div>
+          </div>`;
+        if (pair.night) {
+          const nPr = pair.night.probabilityOfPrecipitation?.value ?? 0;
+          html += `<div class="daily-half night">
+            <div class="top-row"><span class="name">${pair.night.name}</span><span class="icon">${icon(pair.night.shortForecast, false)}</span></div>
+            <div class="temp" style="color:${tempColor(pair.night.temperature)}">${pair.night.temperature}°<span class="suffix"> lo</span></div>
+            <div class="short">${pair.night.shortForecast}</div>
+            <div class="meta">Wind ${pair.night.windSpeed} ${pair.night.windDirection} · Precip ${nPr}%</div>
+            <div class="detail">${pair.night.detailedForecast}</div>
+          </div>`;
+        }
+        html += `</div></div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
+  // Footer
+  html += `<div class="footer">
+    <span>Data: NWS (api.weather.gov)${state.meta ? ` · ${state.meta.office}` : ""}</span>
+    <span>${state.lastUpdate ? "Updated " + state.lastUpdate.toLocaleTimeString() : ""}</span>
+  </div>`;
+
+  // Settings modal
+  if (state.showSettings) {
+    html += `<div class="modal-overlay" onclick="closeSettings(event)">
+      <div class="modal" onclick="event.stopPropagation()">
+        <h2>Set Location</h2>
+        <button class="btn-geo" onclick="geolocate()">📍 Use My Current Location</button>
+        <label>Latitude</label>
+        <input id="set-lat" type="text" value="${state.lat}" inputmode="decimal">
+        <label>Longitude</label>
+        <input id="set-lon" type="text" value="${state.lon}" inputmode="decimal">
+        <div class="btn-row">
+          <button class="btn-secondary" onclick="state.showSettings=false;render();">Cancel</button>
+          <button class="btn-primary" onclick="applyLocation()">Apply</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+// ============ ACTIONS ============
+function setTab(t) { state.tab = t; render(); }
+
+function doRefresh(btn) {
+  if (btn) { btn.classList.add("spinning"); setTimeout(() => btn.classList.remove("spinning"), 800); }
+  loadWeather();
+}
+
+function openSettings() { state.showSettings = true; render(); }
+
+function closeSettings(e) {
+  if (e.target.classList.contains("modal-overlay")) { state.showSettings = false; render(); }
+}
+
+function applyLocation() {
+  const la = parseFloat(document.getElementById("set-lat").value);
+  const lo = parseFloat(document.getElementById("set-lon").value);
+  if (!isNaN(la) && !isNaN(lo)) {
+    state.lat = la; state.lon = lo; state.showSettings = false;
+    loadWeather();
+  }
+}
+
+function geolocate() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const la = Math.round(pos.coords.latitude * 10000) / 10000;
+      const lo = Math.round(pos.coords.longitude * 10000) / 10000;
+      state.lat = la; state.lon = lo; state.showSettings = false;
+      loadWeather();
+    },
+    (err) => { alert("Could not get location. Please enter coordinates manually."); },
+    { enableHighAccuracy: true }
+  );
+}
+
+// ============ INIT ============
+loadPrefs();
+loadWeather();
+
+// Register service worker for PWA
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
