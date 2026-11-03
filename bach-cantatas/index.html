@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1a17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bach Cantatas">
+<title>Bach Cantata Tracker</title>
+<style>
+:root{--bg:#faf8f4;--card:#fff;--ink:#1f1d1a;--mute:#7a746a;--line:#e6e1d8;--accent:#8a3b2a;--done:#2f6b4f;--star:#c58a1b}
+@media (prefers-color-scheme:dark){:root{--bg:#161512;--card:#201e1a;--ink:#f1ede6;--mute:#9a9388;--line:#34312b;--accent:#e0866f;--done:#6fbf98;--star:#e3b04b}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top) 0 calc(40px + env(safe-area-inset-bottom))}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+h1{font:600 22px/1.2 Georgia,serif;margin:8px 0 2px}
+.sub{color:var(--mute);font-size:13px;margin-bottom:14px}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--done);transition:width .3s}
+.stats{display:flex;justify-content:space-between;color:var(--mute);font-size:13px;margin:6px 0 16px}
+.next{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px}
+.next small{color:var(--mute);text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.next .big{font:600 24px/1.2 Georgia,serif;margin:4px 0 2px}
+.next .vol{color:var(--mute);font-size:14px;margin-bottom:12px}
+.row-btn{display:flex;gap:8px;flex-wrap:wrap}
+button,a.btn{font:inherit;font-size:15px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 14px;text-decoration:none;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tools{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.tools button{font-size:13px;padding:7px 11px}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
+summary{list-style:none;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary .vn{font-weight:600;min-width:58px}
+summary .vc{color:var(--mute);font-size:13px;flex:1}
+summary .vp{font-size:12px;color:var(--mute)}
+details.complete summary .vn::after{content:" ✓";color:var(--done)}
+.item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+.chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);background:none;padding:0;flex:none;display:grid;place-items:center;color:#fff;font-size:16px}
+.item.done .chk{background:var(--done);border-color:var(--done)}
+.item .t{flex:1;min-width:0}
+.item .b{font-weight:600}
+.item .n{color:var(--mute);font-size:12px}
+.item.done .b{color:var(--mute)}
+.star{background:none;border:0;padding:6px;font-size:20px;color:var(--line);line-height:1}
+.star.on{color:var(--star)}
+.lnk{font-size:13px;color:var(--accent);text-decoration:none;padding:6px}
+.vfoot{padding:8px 14px 12px;border-top:1px solid var(--line)}
+.vfoot a{font-size:13px;color:var(--accent)}
+.foot{color:var(--mute);font-size:12px;margin-top:18px}
+textarea{width:100%;height:90px;margin-top:8px;font-size:12px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bach Cantatas</h1>
+  <div class="sub">Masaaki Suzuki &middot; Bach Collegium Japan &middot; BIS &middot; Vol. 1&ndash;55</div>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="stats"><span id="count"></span><span id="pct"></span></div>
+  <div id="next"></div>
+  <div class="tools">
+    <button id="hideDone">Hide finished volumes</button>
+    <button id="expand">Expand all</button>
+    <button id="backup">Backup / restore</button>
+  </div>
+  <div id="backupBox" hidden>
+    <textarea id="bk" spellcheck="false"></textarea>
+    <div class="row-btn" style="margin-top:8px">
+      <button id="bkCopy">Copy</button><button id="bkLoad">Load from box</button>
+    </div>
+  </div>
+  <div id="list"></div>
+  <div class="foot">Tap the circle to log a cantata. Progress is saved on this device. Items listed twice are two versions of the same cantata on different volumes.</div>
+</div>
+<script>
+// Contents of each BIS volume as listed in the series. [bwv, note]
+var VOLS=[
+[["4"],["150"],["196"]],
+[["71"],["131"],["106"]],
+[["12"],["54"],["162"],["182"]],
+[["163"],["165"],["185"],["199"]],
+[["18"],["143"],["152"],["155"],["161"]],
+[["21","alt. versions of mvts 3, 7, 8"],["31"]],
+[["61"],["63"],["132"],["172"]],
+[["22"],["23"],["75"]],
+[["24"],["76"],["167"]],
+[["179"],["105"],["186"]],
+[["136"],["138"],["95"],["46"]],
+[["147"],["21"]],
+[["64"],["25"],["69a"],["77"],["50"]],
+[["148"],["48"],["89"],["109"]],
+[["40"],["60"],["70"],["90"]],
+[["194"],["119"]],
+[["153"],["154"],["73"],["144"],["181"]],
+[["66"],["134"],["67"]],
+[["86"],["37"],["104"],["166"]],
+[["184"],["173"],["59"],["44"]],
+[["65"],["81"],["83"],["190"]],
+[["20"],["7"],["94"]],
+[["10"],["93"],["178"],["107"]],
+[["8"],["33"],["113"]],
+[["78"],["99"],["114"]],
+[["180"],["122"],["96"]],
+[["5"],["80"],["115"]],
+[["26"],["62"],["116"],["139"]],
+[["2"],["3"],["38"],["135"]],
+[["51","solo cantata"],["1127","solo cantata"]],
+[["91"],["101"],["121"],["133"]],
+[["111"],["123"],["124"],["125"]],
+[["41"],["92"],["130"]],
+[["1"],["126"],["127"]],
+[["74"],["87"],["128"],["176"]],
+[["42"],["103"],["108"],["6"]],
+[["169"],["170"],["35"],["200"]],
+[["52"],["82"],["55"],["58"]],
+[["68"],["175"],["28"],["183"],["85"]],
+[["137"],["168"],["79"],["164"]],
+[["56","solo cantata"],["82","soprano version, E minor"],["158","solo cantata"],["84","solo cantata"]],
+[["72"],["32"],["13"],["16"]],
+[["110"],["57"],["151"]],
+[["146"],["88"],["43"]],
+[["39"],["187"],["129"]],
+[["102"],["45"],["17"],["19"]],
+[["36"],["47"],["27"]],
+[["34"],["117"],["98"],["120"]],
+[["188"],["156"],["159"],["171"]],
+[["149"],["145"],["174"],["49"]],
+[["195"],["192"],["157"],["120a"]],
+[["140"],["112"],["29"]],
+[["97"],["177"],["9"]],
+[["100"],["14"],["197"],["197a"]],
+[["69"],["30"],["191"]]
+];
+var KEY="bachTracker.v1";
+var S;try{S=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){S={}}
+S.done=S.done||{};S.fav=S.fav||{};S.ui=S.ui||{};
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+var items=[];
+VOLS.forEach(function(v,i){v.forEach(function(c,j){items.push({id:"v"+(i+1)+"-"+c[0],vol:i+1,bwv:c[0],note:c[1]||"",idx:j})})});
+function $(s){return document.querySelector(s)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function spot(v){return "https://open.spotify.com/search/"+encodeURIComponent("Bach Cantatas Vol. "+v+" Suzuki")}
+function txt(b){return "https://www.google.com/search?q="+encodeURIComponent("Bach cantata BWV "+b+" text English translation")}
+function fmt(iso){var d=new Date(iso);return d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}
+function toggle(id){if(S.done[id])delete S.done[id];else S.done[id]=new Date().toISOString();save();render()}
+function render(){
+  var total=items.length,done=items.filter(function(x){return S.done[x.id]}).length;
+  $("#fill").style.width=(done/total*100)+"%";
+  $("#count").textContent=done+" of "+total+" logged";
+  $("#pct").textContent=Math.round(done/total*100)+"%";
+  var nx=items.find(function(x){return !S.done[x.id]});
+  $("#next").innerHTML=nx?'<div class="next"><small>Up next</small><div class="big">BWV '+esc(nx.bwv)+'</div><div class="vol">Vol. '+nx.vol+(nx.note?' &middot; '+esc(nx.note):'')+'</div><div class="row-btn"><button class="primary" data-t="'+nx.id+'">Mark listened</button><a class="btn" href="'+spot(nx.vol)+'">Open in Spotify</a><a class="btn" href="'+txt(nx.bwv)+'">Read text</a></div></div>':'<div class="next"><div class="big">All done.</div><div class="vol">Every cantata logged.</div></div>';
+  var open={};document.querySelectorAll("details[open]").forEach(function(d){open[d.dataset.v]=1});
+  var firstRender=!$("#list").children.length;
+  var html="";
+  VOLS.forEach(function(v,i){
+    var n=i+1,its=items.filter(function(x){return x.vol===n}),dn=its.filter(function(x){return S.done[x.id]}).length;
+    var complete=dn===its.length;
+    if(S.ui.hide&&complete)return;
+    var isOpen=firstRender?(nx&&nx.vol===n):(open[n]||S.ui.all);
+    html+='<details data-v="'+n+'"'+(complete?' class="complete"':'')+(isOpen?' open':'')+'><summary><span class="vn">Vol. '+n+'</span><span class="vc">BWV '+its.map(function(x){return esc(x.bwv)}).join(", ")+'</span><span class="vp">'+dn+'/'+its.length+'</span></summary>';
+    its.forEach(function(x){
+      var d=S.done[x.id];
+      html+='<div class="item'+(d?' done':'')+'"><button class="chk" data-t="'+x.id+'" aria-label="Toggle BWV '+esc(x.bwv)+'">'+(d?'&#10003;':'')+'</button><div class="t"><div class="b">BWV '+esc(x.bwv)+'</div><div class="n">'+(d?'logged '+fmt(d):'')+(d&&x.note?' &middot; ':'')+esc(x.note)+'</div></div><a class="lnk" href="'+txt(x.bwv)+'">text</a><button class="star'+(S.fav[x.id]?' on':'')+'" data-f="'+x.id+'" aria-label="Favorite">&#9733;</button></div>';
+    });
+    html+='<div class="vfoot"><a href="'+spot(n)+'">Find Vol. '+n+' on Spotify</a></div></details>';
+  });
+  $("#list").innerHTML=html;
+  $("#hideDone").textContent=S.ui.hide?"Show finished volumes":"Hide finished volumes";
+  $("#expand").textContent=S.ui.all?"Collapse all":"Expand all";
+}
+document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-t]");if(t){e.preventDefault();toggle(t.dataset.t);return}
+  var f=e.target.closest("[data-f]");if(f){e.preventDefault();var id=f.dataset.f;if(S.fav[id])delete S.fav[id];else S.fav[id]=1;save();render()}
+});
+$("#hideDone").onclick=function(){S.ui.hide=!S.ui.hide;save();render()};
+$("#expand").onclick=function(){S.ui.all=!S.ui.all;save();document.querySelectorAll("details").forEach(function(d){d.open=!!S.ui.all});render()};
+$("#backup").onclick=function(){var b=$("#backupBox");b.hidden=!b.hidden;$("#bk").value=JSON.stringify(S)};
+$("#bkCopy").onclick=function(){var t=$("#bk");t.select();try{navigator.clipboard.writeText(t.value)}catch(e){document.execCommand("copy")}};
+$("#bkLoad").onclick=function(){try{var o=JSON.parse($("#bk").value);if(o&&o.done){S=o;S.done=S.done||{};S.fav=S.fav||{};S.ui=S.ui||{};save();render()}}catch(e){alert("That backup text didn't parse.")}};
+render();
+</script>
+</body>
+</html>
